@@ -1,41 +1,165 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl=2
 
-params.sralist = 'samples_of_interest.txt'
+// Parameters
+params.samples_csv = 'samples.csv'
 params.outdir = 'results'
 params.fastp_reports = "${params.outdir}/fastp-reports"
 params.trimmed_reads = "${params.outdir}/trimmed"
 params.hg19 = "${params.outdir}/hg19"
 params.bwa_index_prefix = "hg19"
 params.gatk_resources = "${params.outdir}/gatk_resources"
+params.varscan_results = "${params.outdir}/varscan"
 
-// Initial data channel- the SRA accession list.
-sra_id_ch = Channel
-    .fromPath(params.sralist)
-    .splitText()
-    .map { it.trim() }
-    .filter { it }  // removes empty lines
+// VarScan parameters
+params.min_coverage = 8
+params.min_coverage_normal = 10
+params.min_coverage_tumor = 6
+params.min_var_freq = 0.10
+params.min_freq_for_hom = 0.75
+params.somatic_p_value = 0.05
+params.strand_filter = 1
+
+// Parse samples CSV to create tumor-normal pairs
+// Each row contains: patient, tumor_srr, normal_srr, sample_type
+samples_ch = Channel
+    .fromPath(params.samples_csv)
+    .splitCsv(header: true)
+    .map { row -> 
+        tuple(
+            row.patient,
+            row.tumor_srr,
+            row.normal_srr,
+            row.sample_type
+        )
+    }
+
+// Extract unique SRR IDs for processing (both tumor and normal)
+// We need to process each SRR only once even if it appears multiple times
+tumor_srrs = samples_ch.map { patient, tumor, normal, type -> tumor }
+normal_srrs = samples_ch.map { patient, tumor, normal, type -> normal }
+all_srrs = tumor_srrs.mix(normal_srrs).unique()
 
 workflow {
 
-    // download and index reference genome
+    // =========================================================================
+    // REFERENCE GENOME AND RESOURCES
+    // =========================================================================
     DOWNLOAD_HG19()
     BWA_INDEX(DOWNLOAD_HG19.out.hg19)
     INDEX_FASTA(DOWNLOAD_HG19.out.hg19)
-    
-
-    // Download GATK resources
     DOWNLOAD_GATK_RESOURCES()
 
-    // main pipeline
-    // Main pipeline
-    sra_id_ch | FASTERQ_DUMP | FASTP \
+    // =========================================================================
+    // PREPROCESS ALL UNIQUE SAMPLES
+    // =========================================================================
+    // Process each unique SRR through: download -> trim -> align -> sort -> markdup -> BQSR
+    all_srrs \
+        | FASTERQ_DUMP \
+        | FASTP \
         | BWA_MEM(BWA_INDEX.out.index.collect()) \
         | SAMTOOLS_SORT \
         | MARKDUPS \
-        | GATK(INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect()) \
-        | VARSCAN
+        | GATK(INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect())
 
+    // =========================================================================
+    // PAIR TUMOR AND NORMAL SAMPLES BY PATIENT
+    // =========================================================================
+    // 
+    // Goal: For each row in samples.csv, match the processed tumor BAM 
+    //       with its corresponding normal BAM from the same patient.
+    //
+    // Input (samples_ch from CSV):
+    //   [patient=7,  tumor_srr=SRR13974111, normal_srr=SRR13973950, type=biopsy]
+    //   [patient=7,  tumor_srr=SRR13973861, normal_srr=SRR13973950, type=plasma]
+    //   ...
+    //
+    // GATK output (final BAMs keyed by SRR):
+    //   [SRR13974111, bam, bai]
+    //   [SRR13973950, bam, bai]
+    //   ...
+    //
+    // Desired output (paired_samples):
+    //   [patient, tumor_srr, normal_srr, type, tumor_bam, tumor_bai, normal_bam, normal_bai]
+
+    // Step 1: Create channel of final BAMs keyed by SRR ID
+    // tuple(srr, bam, bai)
+    final_bams = GATK.out.final_bam
+
+    // Step 2: Join tumor BAMs to sample metadata
+    // - Rekey samples_ch by tumor_srr for joining
+    // - Join with final_bams to attach the tumor BAM files
+    samples_with_tumor_bam = samples_ch
+        .map { patient, tumor_srr, normal_srr, sample_type ->
+            tuple(tumor_srr, patient, normal_srr, sample_type)
+        }
+        .join(final_bams)  // joins on first element (tumor_srr)
+        .map { tumor_srr, patient, normal_srr, sample_type, tumor_bam, tumor_bai ->
+            tuple(
+                normal_srr,   // rekey by normal_srr for next join
+                patient,
+                tumor_srr,
+                sample_type,
+                tumor_bam,
+                tumor_bai
+            )
+        }
+    // Result: tuple(normal_srr, patient, tumor_srr, sample_type, tumor_bam, tumor_bai)
+
+    // Step 3: Join normal BAMs to complete the pairing
+    // - Join on normal_srr to attach normal BAM files
+    // - Restructure to final format
+    paired_samples = samples_with_tumor_bam
+        .join(final_bams)  // joins on first element (normal_srr)
+        .map { normal_srr, patient, tumor_srr, sample_type, tumor_bam, tumor_bai, normal_bam, normal_bai ->
+            tuple(
+                patient,
+                tumor_srr,
+                normal_srr,
+                sample_type,
+                tumor_bam,
+                tumor_bai,
+                normal_bam,
+                normal_bai
+            )
+        }
+    // Result: tuple(patient, tumor_srr, normal_srr, sample_type, tumor_bam, tumor_bai, normal_bam, normal_bai)
+
+    // Debug: uncomment to verify pairing
+    // paired_samples.view { "PAIRED: patient=${it[0]} tumor=${it[1]} normal=${it[2]} type=${it[3]}" }
+
+    // =========================================================================
+    // SOMATIC VARIANT CALLING
+    // =========================================================================
+    SAMTOOLS_MPILEUP(
+        paired_samples,
+        INDEX_FASTA.out.indexed_fasta.collect()
+    )
+
+    VARSCAN_SOMATIC(SAMTOOLS_MPILEUP.out.pileups)
+
+    VARSCAN_PROCESS(VARSCAN_SOMATIC.out.variants)
+}
+
+// =============================================================================
+// REFERENCE AND RESOURCE DOWNLOAD PROCESSES
+// =============================================================================
+
+process DOWNLOAD_HG19 {
+    tag "hg19"
+    label 'basic'
+    storeDir "${params.hg19}"
+
+    output:
+    path("hg19.fa"), emit: hg19
+
+    script:
+    """
+    wget https://hgdownload.gi.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
+    curl -s https://hgdownload.gi.ucsc.edu/goldenPath/hg19/bigZips/md5sum.txt | grep hg19.fa.gz > hg19.fa.gz.md5
+    md5sum -c hg19.fa.gz.md5
+    gunzip hg19.fa.gz
+    """
 }
 
 process DOWNLOAD_GATK_RESOURCES {
@@ -49,13 +173,16 @@ process DOWNLOAD_GATK_RESOURCES {
 
     script:
     """
-    # Download from GATK bundle - adjust URLs to your source
     wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf
     wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.idx
     wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/dbsnp_138.hg19.vcf
     wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/dbsnp_138.hg19.vcf.idx
     """
 }
+
+// =============================================================================
+// INDEXING PROCESSES
+// =============================================================================
 
 process INDEX_FASTA {
     tag "fasta-index"
@@ -75,20 +202,41 @@ process INDEX_FASTA {
     """
 }
 
+process BWA_INDEX {
+    tag "hg19-index"
+    label "bwa_index"
+    storeDir "${params.hg19}"
+
+    input:
+    path(hg19)
+
+    output:
+    tuple path(hg19), path("${params.bwa_index_prefix}.*"), emit: index
+
+    script:
+    """
+    bwa index -p ${params.bwa_index_prefix} ${hg19}
+    """
+}
+
+// =============================================================================
+// PREPROCESSING PROCESSES
+// =============================================================================
+
 process FASTERQ_DUMP {
     tag "${srr}"
-    label 'fasterq_dump' // defines task.cpus and task.memory
-     
+    label 'fasterq_dump'
+
     input:
     val srr
-    
+
     output:
     tuple val(srr), path("raw_reads/${srr}_1.fastq"), path("raw_reads/${srr}_2.fastq"), emit: reads
-    
+
     script:
     """
     module load sra-toolkit/3.0.0
-    
+
     fasterq-dump -f \\
         --threads ${task.cpus} \\
         --mem ${task.memory.toGiga()}GB \\
@@ -98,29 +246,12 @@ process FASTERQ_DUMP {
     """
 }
 
-process DOWNLOAD_HG19 {
-    tag "hg19"
-    label 'basic'
-    storeDir "${params.hg19}", mode: 'symlink'
-
-    output:
-    path("hg19.fa"), emit: hg19
-
-    script:
-    """
-    wget https://hgdownload.gi.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
-    curl -s https://hgdownload.gi.ucsc.edu/goldenPath/hg19/bigZips/md5sum.txt | grep hg19.fa.gz > hg19.fa.gz.md5
-    md5sum -c hg19.fa.gz.md5
-    gunzip hg19.fa.gz
-    """
-}
-
 process FASTP {
     tag "${srr}"
     label 'fastp'
     publishDir "${params.fastp_reports}", mode: 'copy', pattern: "*.{json,html}"
     publishDir "${params.trimmed_reads}", mode: 'symlink', pattern: "*.trimmed.fastq"
-    
+
     input:
     tuple val(srr), path(r1), path(r2)
 
@@ -135,31 +266,12 @@ process FASTP {
     conda activate variant-calling
 
     fastp --thread ${task.cpus} \\
-    -i ${r1} \\
-    -I ${r2} \\
-    -o ${srr}_1.trimmed.fastq \\
-    -O ${srr}_2.trimmed.fastq \\
-    --json ${srr}.json \\
-    --html ${srr}.html
-    """
-}
-
-process BWA_INDEX {
-    tag "hg19-index"
-    label "bwa_index"
-
-    storeDir "${params.hg19}"
-
-    input:
-    path(hg19) // fasta file
-
-    output:
-    tuple path(hg19), path("${params.bwa_index_prefix}.*"), emit: index
-    
-
-    script:
-    """
-    bwa index -p ${params.bwa_index_prefix} ${hg19}
+        -i ${r1} \\
+        -I ${r2} \\
+        -o ${srr}_1.trimmed.fastq \\
+        -O ${srr}_2.trimmed.fastq \\
+        --json ${srr}.json \\
+        --html ${srr}.html
     """
 }
 
@@ -199,30 +311,36 @@ process SAMTOOLS_SORT {
 process MARKDUPS {
     tag "${srr}"
     label "markdups"
-    publishDir "${params.outdir}", mode: 'copy', pattern: "*.txt"
+    publishDir "${params.outdir}/markdup_metrics", mode: 'copy', pattern: "*.txt"
 
     input:
     tuple val(srr), path(bam)
 
     output:
     tuple val(srr), path("${srr}.markdup.bam"), emit: markdup_bam
+    path("*.txt"), emit: metrics
 
     script:
     """
     samtools addreplacerg -r ID:${srr} -r SM:${srr} -r PL:ILLUMINA -o ${srr}.rg.bam ${bam}
 
-    picard MarkDuplicates -I ${srr}.rg.bam -O ${srr}.markdup.bam -M ${srr}.marked_dup_metrics.txt --TMP_DIR \${SLURM_SCRATCH}
+    picard MarkDuplicates \\
+        -I ${srr}.rg.bam \\
+        -O ${srr}.markdup.bam \\
+        -M ${srr}.marked_dup_metrics.txt \\
+        --TMP_DIR \${SLURM_SCRATCH}
     """
 }
 
 process GATK {
     tag "${srr}"
     label "gatk"
+    publishDir "${params.outdir}/final_bams", mode: 'symlink', pattern: "*.bam*"
 
     input:
     tuple val(srr), path(markdup_bam)
-    path(fasta_files)   // dependency signal
-    path(gatk_vcfs)     // dependency signal
+    path(fasta_files)
+    path(gatk_vcfs)
 
     output:
     tuple val(srr), path("${srr}.final.bam"), path("${srr}.final.bam.bai"), emit: final_bam
@@ -236,17 +354,130 @@ process GATK {
         -I ${markdup_bam} \\
         --known-sites ${params.gatk_resources}/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf \\
         --known-sites ${params.gatk_resources}/dbsnp_138.hg19.vcf \\
-        -O ${srr}.recal_data.table --tmp-dir \${SLURM_SCRATCH}
+        -O ${srr}.recal_data.table \\
+        --tmp-dir \${SLURM_SCRATCH}
 
     # Apply the BQSR corrections
     gatk ApplyBQSR \\
         -R ${params.hg19}/hg19.fa \\
         -I ${markdup_bam} \\
         --bqsr-recal-file ${srr}.recal_data.table \\
-        -O ${srr}.final.bam --tmp-dir \${SLURM_SCRATCH}
+        -O ${srr}.final.bam \\
+        --tmp-dir \${SLURM_SCRATCH}
 
     # Index final BAM
     samtools index ${srr}.final.bam
+    """
+}
 
-"""
+// =============================================================================
+// SOMATIC VARIANT CALLING PROCESSES
+// =============================================================================
+
+process SAMTOOLS_MPILEUP {
+    tag "patient${patient}_${sample_type}"
+    label "mpileup"
+
+    input:
+    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type), 
+          path(tumor_bam), path(tumor_bai), path(normal_bam), path(normal_bai)
+    path(fasta_files)
+
+    output:
+    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type),
+          path("${patient}_${sample_type}.normal.pileup"), 
+          path("${patient}_${sample_type}.tumor.pileup"), emit: pileups
+
+    script:
+    def prefix = "${patient}_${sample_type}"
+    """
+    # Generate pileup for normal sample
+    samtools mpileup \\
+        -q 1 \\
+        -f ${params.hg19}/hg19.fa \\
+        ${normal_bam} \\
+        > ${prefix}.normal.pileup
+
+    # Generate pileup for tumor sample
+    samtools mpileup \\
+        -q 1 \\
+        -f ${params.hg19}/hg19.fa \\
+        ${tumor_bam} \\
+        > ${prefix}.tumor.pileup
+    """
+}
+
+process VARSCAN_SOMATIC {
+    tag "patient${patient}_${sample_type}"
+    label "varscan"
+    publishDir "${params.varscan_results}/raw", mode: 'copy'
+
+    input:
+    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type),
+          path(normal_pileup), path(tumor_pileup)
+
+    output:
+    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type),
+          path("${patient}_${sample_type}.snp.vcf"),
+          path("${patient}_${sample_type}.indel.vcf"), emit: variants
+
+    script:
+    def prefix = "${patient}_${sample_type}"
+    """
+    module load miniforge/24.11.3-0
+    conda activate variant-calling
+
+    varscan somatic \\
+        ${normal_pileup} \\
+        ${tumor_pileup} \\
+        ${prefix} \\
+        --min-coverage ${params.min_coverage} \\
+        --min-coverage-normal ${params.min_coverage_normal} \\
+        --min-coverage-tumor ${params.min_coverage_tumor} \\
+        --min-var-freq ${params.min_var_freq} \\
+        --min-freq-for-hom ${params.min_freq_for_hom} \\
+        --somatic-p-value ${params.somatic_p_value} \\
+        --strand-filter ${params.strand_filter} \\
+        --output-vcf 1
+    """
+}
+
+process VARSCAN_PROCESS {
+    tag "patient${patient}_${sample_type}"
+    label "varscan"
+    publishDir "${params.varscan_results}/processed", mode: 'copy'
+
+    input:
+    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type),
+          path(snp_vcf), path(indel_vcf)
+
+    output:
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}.snp.Somatic.hc.vcf"),
+          path("${patient}_${sample_type}.indel.Somatic.hc.vcf"), emit: somatic_hc
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}.snp.Germline.hc.vcf"),
+          path("${patient}_${sample_type}.indel.Germline.hc.vcf"), emit: germline_hc
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}.snp.LOH.hc.vcf"),
+          path("${patient}_${sample_type}.indel.LOH.hc.vcf"), emit: loh_hc
+
+    script:
+    def prefix = "${patient}_${sample_type}"
+    """
+    module load miniforge/24.11.3-0
+    conda activate variant-calling
+
+    # Process SNPs - isolate calls by type and confidence
+    varscan processSomatic ${snp_vcf} \\
+        --min-tumor-freq ${params.min_var_freq} \\
+        --max-normal-freq 0.05 \\
+        --p-value ${params.somatic_p_value}
+
+    # Process Indels - isolate calls by type and confidence
+    varscan processSomatic ${indel_vcf} \\
+        --min-tumor-freq ${params.min_var_freq} \\
+        --max-normal-freq 0.05 \\
+        --p-value ${params.somatic_p_value}
+    """
 }
