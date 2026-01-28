@@ -1,0 +1,3 @@
+patient,tumor_srr,normal_srr,sample_type
+7,SRR13974111,SRR13973950,biopsy
+7,SRR13973861,SRR13973950,plasma
