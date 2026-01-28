@@ -1,0 +1,26 @@
+name: variant-calling
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  # SRA toolkit for downloading data
+  - sra-tools=3.2.1
+
+  # Quality control and trimming
+  - fastp=0.23.4
+
+  # Alignment
+  - bwa=0.7.18
+  - samtools=1.21
+
+  # Variant processing
+  - picard=3.0.0
+  - gatk4=4.4.0.0
+
+  # Variant calling
+  - varscan=2.4.4
+
+  # Utilities
+  - curl
+  - wget

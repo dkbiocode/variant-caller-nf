@@ -54,13 +54,14 @@ workflow {
     // PREPROCESS ALL UNIQUE SAMPLES
     // =========================================================================
     // Process each unique SRR through: download -> trim -> align -> sort -> markdup -> BQSR
-    all_srrs \
-        | FASTERQ_DUMP \
-        | FASTP \
-        | BWA_MEM(BWA_INDEX.out.index.collect()) \
-        | SAMTOOLS_SORT \
-        | MARKDUPS \
-        | GATK(INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect())
+    FASTERQ_DUMP(all_srrs)
+    FASTP(FASTERQ_DUMP.out.reads)
+    BWA_MEM(FASTP.out.trimmed, BWA_INDEX.out.index.collect())
+    SAMTOOLS_SORT(BWA_MEM.out.aligned_sam)
+    MARKDUPS(SAMTOOLS_SORT.out.sorted_bam)
+    GATK(MARKDUPS.out.markdup_bam, INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect())
+
+    final_bam = GATK.out.final_bam
 
     // =========================================================================
     // PAIR TUMOR AND NORMAL SAMPLES BY PATIENT
@@ -84,7 +85,7 @@ workflow {
 
     // Step 1: Create channel of final BAMs keyed by SRR ID
     // tuple(srr, bam, bai)
-    final_bams = GATK.out.final_bam
+    final_bams = final_bam
 
     // Step 2: Join tumor BAMs to sample metadata
     // - Rekey samples_ch by tumor_srr for joining
@@ -155,7 +156,7 @@ process DOWNLOAD_HG19 {
 
     script:
     """
-    wget https://hgdownload.gi.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
+    curl -O https://hgdownload.gi.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz
     curl -s https://hgdownload.gi.ucsc.edu/goldenPath/hg19/bigZips/md5sum.txt | grep hg19.fa.gz > hg19.fa.gz.md5
     md5sum -c hg19.fa.gz.md5
     gunzip hg19.fa.gz
@@ -168,15 +169,23 @@ process DOWNLOAD_GATK_RESOURCES {
     storeDir "${params.gatk_resources}"
 
     output:
-    path("*.vcf"), emit: vcfs
-    path("*.vcf.idx"), emit: indexes
+    path("*.vcf.gz"), emit: vcfs
+    path("*.vcf.gz.tbi"), emit: indexes
 
     script:
     """
-    wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf
-    wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.idx
-    wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/dbsnp_138.hg19.vcf
-    wget https://storage.googleapis.com/genomics-public-data/resources/broad/hg19/v0/dbsnp_138.hg19.vcf.idx
+    # Download Mills indels from Broad FTP (requires special login)
+    wget ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/hg19/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz
+
+    # Re-compress with bgzip and index (file is gzipped but not bgzipped)
+    gunzip Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz
+    bgzip Mills_and_1000G_gold_standard.indels.hg19.sites.vcf
+    tabix -p vcf Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz
+
+    # Download dbSNP from NCBI latest release (GCF_000001405.25 = GRCh37/hg19)
+    # Using latest_release which points to most recent build
+    wget https://ftp.ncbi.nih.gov/snp/latest_release/VCF/GCF_000001405.25.gz -O dbsnp_138.hg19.vcf.gz
+    wget https://ftp.ncbi.nih.gov/snp/latest_release/VCF/GCF_000001405.25.gz.tbi -O dbsnp_138.hg19.vcf.gz.tbi
     """
 }
 
@@ -193,7 +202,7 @@ process INDEX_FASTA {
     path(hg19)
 
     output:
-    tuple path(hg19), path("${hg19}.fai"), path("*.dict"), emit: indexed_fasta
+    tuple path("${hg19}.fai"), path("*.dict"), emit: indexed_fasta
 
     script:
     """
@@ -211,7 +220,7 @@ process BWA_INDEX {
     path(hg19)
 
     output:
-    tuple path(hg19), path("${params.bwa_index_prefix}.*"), emit: index
+    path("hg19.*"), emit: index
 
     script:
     """
@@ -226,22 +235,24 @@ process BWA_INDEX {
 process FASTERQ_DUMP {
     tag "${srr}"
     label 'fasterq_dump'
+    storeDir "${params.outdir}/sra_downloads/${srr}"
 
     input:
     val srr
 
     output:
-    tuple val(srr), path("raw_reads/${srr}_1.fastq"), path("raw_reads/${srr}_2.fastq"), emit: reads
+    tuple val(srr), path("${srr}_1.fastq"), path("${srr}_2.fastq"), emit: reads
 
     script:
+    def temp_dir = task.executor == 'slurm' ? "\$SLURM_SCRATCH" : "\$TMPDIR"
+    def module_load = task.executor == 'slurm' ? "module load sra-toolkit/3.0.0" : ""
     """
-    module load sra-toolkit/3.0.0
+    ${module_load}
 
     fasterq-dump -f \\
         --threads ${task.cpus} \\
         --mem ${task.memory.toGiga()}GB \\
-        -O raw_reads \\
-        --temp \$SLURM_SCRATCH \\
+        --temp ${temp_dir} \\
         ${srr}
     """
 }
@@ -261,9 +272,12 @@ process FASTP {
     path("*.html"), emit: html
 
     script:
-    """
+    def conda_init = task.executor == 'slurm' ? """
     module load miniforge/24.11.3-0
     conda activate variant-calling
+    """ : ""
+    """
+    ${conda_init}
 
     fastp --thread ${task.cpus} \\
         -i ${r1} \\
@@ -281,14 +295,14 @@ process BWA_MEM {
 
     input:
     tuple val(srr), path(trimmed_r1), path(trimmed_r2)
-    path(hg19)
+    path(index_files)
 
     output:
     tuple val(srr), path("${srr}.sam"), emit: aligned_sam
 
     script:
     """
-    bwa mem -t ${task.cpus} ${params.hg19}/${params.bwa_index_prefix} ${trimmed_r1} ${trimmed_r2} > ${srr}.sam
+    bwa mem -t ${task.cpus} ${params.bwa_index_prefix} ${trimmed_r1} ${trimmed_r2} > ${srr}.sam
     """
 }
 
@@ -346,16 +360,17 @@ process GATK {
     tuple val(srr), path("${srr}.final.bam"), path("${srr}.final.bam.bai"), emit: final_bam
 
     script:
+    def temp_dir = task.executor == 'slurm' ? "\${SLURM_SCRATCH}" : "."
     """
     # Base Quality Score Recalibration
     gatk BaseRecalibrator \\
-        --java-options "-Djava.io.tmpdir=\${SLURM_SCRATCH}" \\
+        --java-options "-Djava.io.tmpdir=${temp_dir}" \\
         -R ${params.hg19}/hg19.fa \\
         -I ${markdup_bam} \\
-        --known-sites ${params.gatk_resources}/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf \\
-        --known-sites ${params.gatk_resources}/dbsnp_138.hg19.vcf \\
+        --known-sites ${params.gatk_resources}/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz \\
+        --known-sites ${params.gatk_resources}/dbsnp_138.hg19.vcf.gz \\
         -O ${srr}.recal_data.table \\
-        --tmp-dir \${SLURM_SCRATCH}
+        --tmp-dir ${temp_dir}
 
     # Apply the BQSR corrections
     gatk ApplyBQSR \\
@@ -363,7 +378,7 @@ process GATK {
         -I ${markdup_bam} \\
         --bqsr-recal-file ${srr}.recal_data.table \\
         -O ${srr}.final.bam \\
-        --tmp-dir \${SLURM_SCRATCH}
+        --tmp-dir ${temp_dir}
 
     # Index final BAM
     samtools index ${srr}.final.bam
