@@ -365,20 +365,25 @@ process GATK {
 
     script:
     def temp_dir = task.executor == 'slurm' ? "\${SLURM_SCRATCH}" : "."
+    // Find the reference fasta - it should be named hg19.fa
+    def ref_fasta = "hg19.fa"
+    // Find the known sites VCFs
+    def mills_vcf = "Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz"
+    def dbsnp_vcf = "dbsnp_138.hg19.vcf.gz"
     """
     # Base Quality Score Recalibration
     gatk BaseRecalibrator \\
         --java-options "-Djava.io.tmpdir=${temp_dir}" \\
-        -R ${params.hg19}/hg19.fa \\
+        -R ${ref_fasta} \\
         -I ${markdup_bam} \\
-        --known-sites ${params.gatk_resources}/Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz \\
-        --known-sites ${params.gatk_resources}/dbsnp_138.hg19.vcf.gz \\
+        --known-sites ${mills_vcf} \\
+        --known-sites ${dbsnp_vcf} \\
         -O ${srr}.recal_data.table \\
         --tmp-dir ${temp_dir}
 
     # Apply the BQSR corrections
     gatk ApplyBQSR \\
-        -R ${params.hg19}/hg19.fa \\
+        -R ${ref_fasta} \\
         -I ${markdup_bam} \\
         --bqsr-recal-file ${srr}.recal_data.table \\
         -O ${srr}.final.bam \\
@@ -409,18 +414,19 @@ process SAMTOOLS_MPILEUP {
 
     script:
     def prefix = "${patient}_${sample_type}"
+    def ref_fasta = "hg19.fa"
     """
     # Generate pileup for normal sample
     samtools mpileup \\
         -q 1 \\
-        -f ${params.hg19}/hg19.fa \\
+        -f ${ref_fasta} \\
         ${normal_bam} \\
         > ${prefix}.normal.pileup
 
     # Generate pileup for tumor sample
     samtools mpileup \\
         -q 1 \\
-        -f ${params.hg19}/hg19.fa \\
+        -f ${ref_fasta} \\
         ${tumor_bam} \\
         > ${prefix}.tumor.pileup
     """
