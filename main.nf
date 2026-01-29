@@ -59,7 +59,7 @@ workflow {
     BWA_MEM(FASTP.out.trimmed, BWA_INDEX.out.index.collect())
     SAMTOOLS_SORT(BWA_MEM.out.aligned_sam)
     MARKDUPS(SAMTOOLS_SORT.out.sorted_bam)
-    GATK(MARKDUPS.out.markdup_bam, INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect())
+    GATK(MARKDUPS.out.markdup_bam, DOWNLOAD_HG19.out.hg19.collect(), INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect())
 
     final_bam = GATK.out.final_bam
 
@@ -134,6 +134,7 @@ workflow {
     // =========================================================================
     SAMTOOLS_MPILEUP(
         paired_samples,
+        DOWNLOAD_HG19.out.hg19.collect(),
         INDEX_FASTA.out.indexed_fasta.collect()
     )
 
@@ -347,7 +348,8 @@ process GATK {
 
     input:
     tuple val(srr), path(markdup_bam)
-    path(fasta_files)
+    path(ref_fasta)
+    path(fasta_indices)
     path(gatk_vcfs)
 
     output:
@@ -355,8 +357,6 @@ process GATK {
 
     script:
     def temp_dir = task.executor == 'slurm' ? "\${SLURM_SCRATCH}" : "."
-    // Find the reference fasta - it should be named hg19.fa
-    def ref_fasta = "hg19.fa"
     // Find the known sites VCFs
     def mills_vcf = "Mills_and_1000G_gold_standard.indels.hg19.sites.vcf.gz"
     def dbsnp_vcf = "dbsnp_138.hg19.vcf.gz"
@@ -393,18 +393,18 @@ process SAMTOOLS_MPILEUP {
     label "mpileup"
 
     input:
-    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type), 
+    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type),
           path(tumor_bam), path(tumor_bai), path(normal_bam), path(normal_bai)
-    path(fasta_files)
+    path(ref_fasta)
+    path(fasta_indices)
 
     output:
     tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type),
-          path("${patient}_${sample_type}.normal.pileup"), 
+          path("${patient}_${sample_type}.normal.pileup"),
           path("${patient}_${sample_type}.tumor.pileup"), emit: pileups
 
     script:
     def prefix = "${patient}_${sample_type}"
-    def ref_fasta = "hg19.fa"
     """
     # Generate pileup for normal sample
     samtools mpileup \\
