@@ -18,13 +18,7 @@ while true; do
     # Move cursor to top-left without clearing (no flicker)
     tput cup 0 0
 
-    # Capture output in variable to count lines and pad
-    output=$(cat <<EOF
-======================================================================
-  SLURM Job Monitor - $(date '+%Y-%m-%d %H:%M:%S')
-  Refresh: ${REFRESH_INTERVAL}s
-======================================================================
-
+    # Header with timestamp
     echo "======================================================================"
     echo "  SLURM Job Monitor - $(date '+%Y-%m-%d %H:%M:%S')"
     echo "  Refresh: ${REFRESH_INTERVAL}s"
@@ -124,7 +118,7 @@ while true; do
     echo ""
     echo -e "Legend: ${GREEN}RUNNING${NC} | ${YELLOW}PENDING${NC} | ${CYAN}COMPLETED${NC} | ${RED}FAILED${NC} | ${MAGENTA}TIMEOUT${NC} | ${BLUE}CANCELLED${NC}"
 
-    # Pad with blank lines to clear any leftover text (ensure we overwrite ~40 lines)
+    # Pad with blank lines to clear any leftover text from previous iteration
     for i in {1..20}; do echo ""; done
 
     # Wait before next update
