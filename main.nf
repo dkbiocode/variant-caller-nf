@@ -273,7 +273,7 @@ process FASTP {
 
     script:
     def conda_init = task.executor == 'slurm' ? """
-    module load miniforge/24.11.3-0
+    module load miniforge
     conda activate variant-calling
     """ : ""
     """
@@ -336,6 +336,10 @@ process MARKDUPS {
 
     script:
     """
+    module load miniforge
+    conda activate variant-calling
+
+
     samtools addreplacerg -r ID:${srr} -r SM:${srr} -r PL:ILLUMINA -o ${srr}.rg.bam ${bam}
 
     picard MarkDuplicates \\
@@ -439,7 +443,7 @@ process VARSCAN_SOMATIC {
     script:
     def prefix = "${patient}_${sample_type}"
     """
-    module load miniforge/24.11.3-0
+    module load miniforge
     conda activate variant-calling
 
     varscan somatic \\
@@ -480,7 +484,7 @@ process VARSCAN_PROCESS {
     script:
     def prefix = "${patient}_${sample_type}"
     """
-    module load miniforge/24.11.3-0
+    module load miniforge
     conda activate variant-calling
 
     # Process SNPs - isolate calls by type and confidence
