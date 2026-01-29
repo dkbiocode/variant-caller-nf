@@ -14,7 +14,16 @@ trap 'tput cnorm; exit 0' INT TERM
 # Hide cursor for cleaner display
 tput civis
 
+# Get terminal dimensions
+TERM_LINES=$(tput lines)
+
 while true; do
+    # Clear screen once at start to reset position
+    if [[ -z "$INITIALIZED" ]]; then
+        clear
+        INITIALIZED=1
+    fi
+
     # Move cursor to top-left without clearing (no flicker)
     tput cup 0 0
 
@@ -118,8 +127,13 @@ while true; do
     echo ""
     echo -e "Legend: ${GREEN}RUNNING${NC} | ${YELLOW}PENDING${NC} | ${CYAN}COMPLETED${NC} | ${RED}FAILED${NC} | ${MAGENTA}TIMEOUT${NC} | ${BLUE}CANCELLED${NC}"
 
-    # Pad with blank lines to clear any leftover text from previous iteration
-    for i in {1..20}; do echo ""; done
+    # Pad with blank lines to fill remaining terminal height and clear leftover text
+    # Assume we've printed about 10-30 lines of content, pad to fill screen
+    LINES_PRINTED=30  # Approximate, adjust if needed
+    BLANK_LINES=$((TERM_LINES - LINES_PRINTED))
+    if [[ $BLANK_LINES -gt 0 ]]; then
+        for ((i=0; i<BLANK_LINES; i++)); do echo ""; done
+    fi
 
     # Wait before next update
     sleep "$REFRESH_INTERVAL"
