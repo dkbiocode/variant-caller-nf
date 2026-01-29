@@ -206,9 +206,10 @@ process INDEX_FASTA {
     tuple path("${hg19}.fai"), path("*.dict"), emit: indexed_fasta
 
     script:
+    def dict_name = hg19.toString().replaceAll(/\.fa$/, '.dict')
     """
     samtools faidx ${hg19}
-    gatk CreateSequenceDictionary -R ${hg19}
+    gatk CreateSequenceDictionary -R ${hg19} -O ${dict_name}
     """
 }
 
