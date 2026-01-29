@@ -59,7 +59,7 @@ workflow {
     BWA_MEM(FASTP.out.trimmed, BWA_INDEX.out.index.collect())
     SAMTOOLS_SORT(BWA_MEM.out.aligned_sam)
     MARKDUPS(SAMTOOLS_SORT.out.sorted_bam)
-    GATK(MARKDUPS.out.markdup_bam, DOWNLOAD_HG19.out.hg19.collect(), INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect())
+    GATK(MARKDUPS.out.markdup_bam, DOWNLOAD_HG19.out.hg19.collect(), INDEX_FASTA.out.indexed_fasta.collect(), DOWNLOAD_GATK_RESOURCES.out.vcfs.collect(), DOWNLOAD_GATK_RESOURCES.out.indexes.collect())
 
     final_bam = GATK.out.final_bam
 
@@ -352,6 +352,7 @@ process GATK {
     path(ref_fasta)
     path(fasta_indices)
     path(gatk_vcfs)
+    path(gatk_vcf_indices)
 
     output:
     tuple val(srr), path("${srr}.final.bam"), path("${srr}.final.bam.bai"), emit: final_bam
