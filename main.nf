@@ -298,7 +298,8 @@ process BWA_MEM {
 
     script:
     """
-    bwa mem -t ${task.cpus} ${params.bwa_index_prefix} ${trimmed_r1} ${trimmed_r2} > ${srr}.sam
+    bwa mem -t ${task.cpus} ${params.bwa_index_prefix} ${trimmed_r1} ${trimmed_r2} | \\
+    samtools view -h -f 2 > ${srr}.sam
     """
 }
 
@@ -331,14 +332,17 @@ process MARKDUPS {
     path("*.txt"), emit: metrics
 
     script:
+    def mem_gb = task.memory ? task.memory.toGiga() - 2 : 8
+    def tmp_dir = task.executor == 'slurm' && task.scratch ? "\${SLURM_SCRATCH}" : "."
     """
     samtools addreplacerg -r ID:${srr} -r SM:${srr} -r PL:ILLUMINA -o ${srr}.rg.bam ${bam}
 
-    picard MarkDuplicates \\
+    picard -Xmx${mem_gb}g MarkDuplicates \\
         -I ${srr}.rg.bam \\
         -O ${srr}.markdup.bam \\
         -M ${srr}.marked_dup_metrics.txt \\
-        --TMP_DIR \${SLURM_SCRATCH}
+        --VERBOSITY DEBUG \\
+        --TMP_DIR ${tmp_dir}
     """
 }
 
