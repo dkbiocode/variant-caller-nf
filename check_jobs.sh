@@ -94,12 +94,18 @@ while true; do
     if [[ -n "$finished_jids" ]]; then
         finished_count=$(echo "$finished_jids" | tr ',' '\n' | wc -l)
 
-        # Count by status
-        completed=$(sa -j "$all_jids" 2>/dev/null | grep -c "COMPLETED" || echo 0)
-        failed=$(sa -j "$all_jids" 2>/dev/null | grep -c "FAILED" || echo 0)
+        # Count by status - ensure we get a clean integer
+        completed=$(sa -j "$all_jids" 2>/dev/null | grep -c "COMPLETED" | tr -d '\n' || echo 0)
+        failed=$(sa -j "$all_jids" 2>/dev/null | grep -c "FAILED" | tr -d '\n' || echo 0)
+
+        # Remove any whitespace and ensure it's a number
+        completed=${completed// /}
+        failed=${failed// /}
+        : ${completed:=0}
+        : ${failed:=0}
 
         echo -e "  ${CYAN}Completed: $completed${NC}"
-        if [[ $failed -gt 0 ]]; then
+        if [[ "$failed" -gt 0 ]] 2>/dev/null; then
             echo -e "  ${RED}Failed: $failed${NC}"
         fi
         echo "  Total Finished: $finished_count"
