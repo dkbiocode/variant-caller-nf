@@ -63,27 +63,20 @@ while true; do
     echo "Jobs Status:"
     echo "----------------------------------------------------------------------"
 
-    # Get sacct output and colorize
+    # Get sacct output and colorize only the State column
     sa -j "$all_jids" 2>/dev/null | while IFS= read -r line; do
         # Skip empty lines
         [[ -z "$line" ]] && continue
 
-        # Color code based on state
-        if [[ "$line" =~ "RUNNING" ]]; then
-            echo -e "${GREEN}${line}${NC}"
-        elif [[ "$line" =~ "PENDING" ]]; then
-            echo -e "${YELLOW}${line}${NC}"
-        elif [[ "$line" =~ "COMPLETED" ]]; then
-            echo -e "${CYAN}${line}${NC}"
-        elif [[ "$line" =~ "FAILED" ]]; then
-            echo -e "${RED}${line}${NC}"
-        elif [[ "$line" =~ "TIMEOUT" ]]; then
-            echo -e "${MAGENTA}${line}${NC}"
-        elif [[ "$line" =~ "CANCELLED" ]]; then
-            echo -e "${BLUE}${line}${NC}"
-        else
-            echo "$line"
-        fi
+        # Color code only the state word, not the entire line
+        line=$(echo "$line" | sed -E "s/RUNNING/${GREEN}RUNNING${NC}/g")
+        line=$(echo "$line" | sed -E "s/PENDING/${YELLOW}PENDING${NC}/g")
+        line=$(echo "$line" | sed -E "s/COMPLETED/${CYAN}COMPLETED${NC}/g")
+        line=$(echo "$line" | sed -E "s/FAILED/${RED}FAILED${NC}/g")
+        line=$(echo "$line" | sed -E "s/TIMEOUT/${MAGENTA}TIMEOUT${NC}/g")
+        line=$(echo "$line" | sed -E "s/CANCELLED/${BLUE}CANCELLED${NC}/g")
+
+        echo -e "$line"
     done
 
     echo ""
@@ -115,9 +108,9 @@ while true; do
     fi
 
     echo ""
-    echo -e "${NC}Press Ctrl-C to exit | Updating every ${REFRESH_INTERVAL} seconds...${NC}"
+    echo "Press Ctrl-C to exit | Updating every ${REFRESH_INTERVAL} seconds..."
     echo ""
-    echo "Legend: ${GREEN}RUNNING${NC} | ${YELLOW}PENDING${NC} | ${CYAN}COMPLETED${NC} | ${RED}FAILED${NC} | ${MAGENTA}TIMEOUT${NC} | ${BLUE}CANCELLED${NC}"
+    echo -e "Legend: ${GREEN}RUNNING${NC} | ${YELLOW}PENDING${NC} | ${CYAN}COMPLETED${NC} | ${RED}FAILED${NC} | ${MAGENTA}TIMEOUT${NC} | ${BLUE}CANCELLED${NC}"
 
     # Wait before next update
     sleep "$REFRESH_INTERVAL"
