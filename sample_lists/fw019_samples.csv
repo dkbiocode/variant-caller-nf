@@ -1,0 +1,5 @@
+patient,tumor_srr,normal_srr,sample_type
+C_fw019,SRR13974111,SRR13973864,biopsy
+C_fw019,SRR13973845,SRR13973864,plasma_baseline
+C_fw019,SRR13973847,SRR13973864,plasma_tp2
+C_fw019,SRR13973846,SRR13973864,plasma_tp5
