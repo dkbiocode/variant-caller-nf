@@ -15,11 +15,16 @@ trap 'tput cnorm; exit 0' INT TERM
 tput civis
 
 while true; do
-    # Move cursor to top-left and clear screen content
+    # Move cursor to top-left without clearing (no flicker)
     tput cup 0 0
-    tput ed  # Erase from cursor to end of display
 
-    # Header with timestamp
+    # Capture output in variable to count lines and pad
+    output=$(cat <<EOF
+======================================================================
+  SLURM Job Monitor - $(date '+%Y-%m-%d %H:%M:%S')
+  Refresh: ${REFRESH_INTERVAL}s
+======================================================================
+
     echo "======================================================================"
     echo "  SLURM Job Monitor - $(date '+%Y-%m-%d %H:%M:%S')"
     echo "  Refresh: ${REFRESH_INTERVAL}s"
@@ -118,6 +123,9 @@ while true; do
     echo "Press Ctrl-C to exit | Updating every ${REFRESH_INTERVAL} seconds..."
     echo ""
     echo -e "Legend: ${GREEN}RUNNING${NC} | ${YELLOW}PENDING${NC} | ${CYAN}COMPLETED${NC} | ${RED}FAILED${NC} | ${MAGENTA}TIMEOUT${NC} | ${BLUE}CANCELLED${NC}"
+
+    # Pad with blank lines to clear any leftover text (ensure we overwrite ~40 lines)
+    for i in {1..20}; do echo ""; done
 
     # Wait before next update
     sleep "$REFRESH_INTERVAL"
