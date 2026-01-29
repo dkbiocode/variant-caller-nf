@@ -15,8 +15,9 @@ trap 'tput cnorm; exit 0' INT TERM
 tput civis
 
 while true; do
-    # Move cursor to top-left without clearing (for in-place update)
+    # Move cursor to top-left and clear screen content
     tput cup 0 0
+    tput ed  # Erase from cursor to end of display
 
     # Header with timestamp
     echo "======================================================================"
