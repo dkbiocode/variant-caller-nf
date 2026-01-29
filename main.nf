@@ -20,25 +20,37 @@ params.min_freq_for_hom = 0.75
 params.somatic_p_value = 0.05
 params.strand_filter = 1
 
-// Parse samples CSV to create tumor-normal pairs
-// Each row contains: patient, tumor_srr, normal_srr, sample_type
-samples_ch = Channel
-    .fromPath(params.samples_csv)
-    .splitCsv(header: true)
-    .map { row -> 
-        tuple(
-            row.patient,
-            row.tumor_srr,
-            row.normal_srr,
-            row.sample_type
-        )
-    }
+  // Parse samples CSV to create tumor-normal pairs
+  // Each row contains: patient, tumor_srr, normal_srr, sample_type
+  def samples_input = Channel
+      .fromPath(params.samples_csv)
+      .splitCsv(header: true)
+      .map { row ->
+          tuple(
+              row.patient,
+              row.tumor_srr,
+              row.normal_srr,
+              row.sample_type
+          )
+      }
 
-// Extract unique SRR IDs for processing (both tumor and normal)
-// We need to process each SRR only once even if it appears multiple times
-tumor_srrs = samples_ch.map { patient, tumor, normal, type -> tumor }
-normal_srrs = samples_ch.map { patient, tumor, normal, type -> normal }
-all_srrs = tumor_srrs.mix(normal_srrs).unique()
+  // Use multiMap to split into two channels without consuming the source
+  def sample_channels = samples_input.multiMap { patient, tumor_srr, normal_srr, sample_type ->
+      // Channel for pairing (preserve all metadata)
+      pairing: tuple(patient, tumor_srr, normal_srr, sample_type)
+      // Channel for extracting SRR IDs
+      srr_extraction: tuple(tumor_srr, normal_srr)
+  }
+
+  // Channels created by multiMap
+  samples_ch = sample_channels.pairing
+  srr_pairs = sample_channels.srr_extraction
+
+  // Extract unique SRR IDs for processing (both tumor and normal)
+  all_srrs = srr_pairs
+      .flatMap { tumor, normal -> [tumor, normal] }
+      .unique()
+
 
 workflow {
 
@@ -298,7 +310,7 @@ process BWA_MEM {
 
     script:
     """
-    bwa mem -t ${task.cpus} ${params.bwa_index_prefix} ${trimmed_r1} ${trimmed_r2} | \\
+    bwa mem -t ${task.cpus} -M -T 30 ${params.bwa_index_prefix} ${trimmed_r1} ${trimmed_r2} | \\
     samtools view -h -f 2 > ${srr}.sam
     """
 }
@@ -414,7 +426,7 @@ process SAMTOOLS_MPILEUP {
     """
     # Generate pileup for normal sample
     samtools mpileup \\
-        -q 1 \\
+        -q 20 -Q 20 \\
         -f ${ref_fasta} \\
         ${normal_bam} \\
         > ${prefix}.normal.pileup
