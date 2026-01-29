@@ -272,13 +272,7 @@ process FASTP {
     path("*.html"), emit: html
 
     script:
-    def conda_init = task.executor == 'slurm' ? """
-    module load miniforge
-    conda activate variant-calling
-    """ : ""
     """
-    ${conda_init}
-
     fastp --thread ${task.cpus} \\
         -i ${r1} \\
         -I ${r2} \\
@@ -336,10 +330,6 @@ process MARKDUPS {
 
     script:
     """
-    module load miniforge
-    conda activate variant-calling
-
-
     samtools addreplacerg -r ID:${srr} -r SM:${srr} -r PL:ILLUMINA -o ${srr}.rg.bam ${bam}
 
     picard MarkDuplicates \\
@@ -449,9 +439,6 @@ process VARSCAN_SOMATIC {
     script:
     def prefix = "${patient}_${sample_type}"
     """
-    module load miniforge
-    conda activate variant-calling
-
     varscan somatic \\
         ${normal_pileup} \\
         ${tumor_pileup} \\
@@ -490,9 +477,6 @@ process VARSCAN_PROCESS {
     script:
     def prefix = "${patient}_${sample_type}"
     """
-    module load miniforge
-    conda activate variant-calling
-
     # Process SNPs - isolate calls by type and confidence
     varscan processSomatic ${snp_vcf} \\
         --min-tumor-freq ${params.min_var_freq} \\
