@@ -27,10 +27,10 @@ params.strand_filter = 1
       .splitCsv(header: true)
       .map { row ->
           tuple(
-              row.patient,
-              row.tumor_srr,
-              row.normal_srr,
-              row.sample_type
+              row.patient.trim(),
+              row.tumor_srr.trim(),
+              row.normal_srr.trim(),
+              row.sample_type.trim()
           )
       }
 
