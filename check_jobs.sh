@@ -15,8 +15,8 @@ trap 'tput cnorm; exit 0' INT TERM
 tput civis
 
 while true; do
-    # Clear screen and move to top
-    clear
+    # Move cursor to top-left without clearing (for in-place update)
+    tput cup 0 0
 
     # Header with timestamp
     echo "======================================================================"
@@ -69,14 +69,14 @@ while true; do
         [[ -z "$line" ]] && continue
 
         # Color code only the state word, not the entire line
-        line=$(echo "$line" | sed -E "s/RUNNING/${GREEN}RUNNING${NC}/g")
-        line=$(echo "$line" | sed -E "s/PENDING/${YELLOW}PENDING${NC}/g")
-        line=$(echo "$line" | sed -E "s/COMPLETED/${CYAN}COMPLETED${NC}/g")
-        line=$(echo "$line" | sed -E "s/FAILED/${RED}FAILED${NC}/g")
-        line=$(echo "$line" | sed -E "s/TIMEOUT/${MAGENTA}TIMEOUT${NC}/g")
-        line=$(echo "$line" | sed -E "s/CANCELLED/${BLUE}CANCELLED${NC}/g")
-
-        echo -e "$line"
+        # Use printf instead of echo to preserve formatting and enable colors
+        printf '%s\n' "$line" | sed -E \
+            -e "s/RUNNING/$(printf "${GREEN}")RUNNING$(printf "${NC}")/g" \
+            -e "s/PENDING/$(printf "${YELLOW}")PENDING$(printf "${NC}")/g" \
+            -e "s/COMPLETED/$(printf "${CYAN}")COMPLETED$(printf "${NC}")/g" \
+            -e "s/FAILED/$(printf "${RED}")FAILED$(printf "${NC}")/g" \
+            -e "s/TIMEOUT/$(printf "${MAGENTA}")TIMEOUT$(printf "${NC}")/g" \
+            -e "s/CANCELLED/$(printf "${BLUE}")CANCELLED$(printf "${NC}")/g"
     done
 
     echo ""
