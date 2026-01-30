@@ -120,11 +120,37 @@ workflow {
     // Result: tuple(normal_srr, patient, tumor_srr, sample_type, tumor_bam, tumor_bai)
 
     // Step 3: Join normal BAMs to complete the pairing
-    // - Join on normal_srr to attach normal BAM files
-    // - Restructure to final format
+    // IMPORTANT: Collect all final_bams first to avoid race condition
+    // Convert to Map for easy lookup: SRR_ID -> [bam, bai]
+    all_final_bams = final_bams
+        .toList()
+        .map { bam_list ->
+            // Convert list of [srr, bam, bai] tuples to a Map
+            def bam_map = [:]
+            bam_list.each { tuple_item ->
+                def srr = tuple_item[0]
+                def bam = tuple_item[1]
+                def bai = tuple_item[2]
+                bam_map[srr] = [bam, bai]
+            }
+            return bam_map
+        }
+
     paired_samples = samples_with_tumor_bam
-        .join(final_bams)  // joins on first element (normal_srr)
-        .map { normal_srr, patient, tumor_srr, sample_type, tumor_bam, tumor_bai, normal_bam, normal_bai ->
+        .combine(all_final_bams)  // Combine with the BAM map
+        .map { item ->
+            // Unpack: first 6 elements are from samples_with_tumor_bam, last is the bam map
+            def normal_srr = item[0]
+            def patient = item[1]
+            def tumor_srr = item[2]
+            def sample_type = item[3]
+            def tumor_bam = item[4]
+            def tumor_bai = item[5]
+            def bam_map = item[6]  // This is a Map: SRR_ID -> [bam, bai]
+
+            // Lookup the normal BAM from the map
+            def normal_files = bam_map[normal_srr]
+
             tuple(
                 patient,
                 tumor_srr,
@@ -132,8 +158,8 @@ workflow {
                 sample_type,
                 tumor_bam,
                 tumor_bai,
-                normal_bam,
-                normal_bai
+                normal_files[0],  // normal_bam
+                normal_files[1]   // normal_bai
             )
         }
     // Result: tuple(patient, tumor_srr, normal_srr, sample_type, tumor_bam, tumor_bai, normal_bam, normal_bai)
