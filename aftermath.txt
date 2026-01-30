@@ -1,0 +1,171 @@
+=== Total variants ===
+1739 results/varscan/all_variants_summary.tsv
+
+=== Variants per patient ===
+    664 C_fw016
+    177 C_fw017
+    470 C_fw019
+    207 C_fw028
+    220 C_fw030
+
+=== Somatic vs other ===
+   1738 Somatic
+
+=== High-VAF somatic variants (>10%) ===
+C_fw016 biopsy:chr1 26135285>G VAF=13.33%
+C_fw016 biopsy:chr1 26137952>A VAF=13.33%
+C_fw016 biopsy:chr1 26140677>C VAF=14.29%
+C_fw016 biopsy:chr1 48657982>G VAF=35.71%
+C_fw016 biopsy:chr1 115226089>C VAF=10.17%
+C_fw016 biopsy:chr1 115226103>C VAF=12.57%
+C_fw016 biopsy:chr1 115226283>A VAF=11.66%
+C_fw016 biopsy:chr1 115226293>T VAF=20.83%
+C_fw016 biopsy:chr1 115226349>G VAF=12.5%
+C_fw016 biopsy:chr1 115252414>T VAF=11.86%
+C_fw016 biopsy:chr1 115252420>C VAF=26.67%
+C_fw016 biopsy:chr1 115252425>T VAF=31.43%
+C_fw016 biopsy:chr1 115252442>T VAF=14.29%
+C_fw016 biopsy:chr1 115902228>T VAF=30.0%
+C_fw016 biopsy:chr1 150754030>G VAF=47.62%
+C_fw016 biopsy:chr1 153420243>T VAF=10.42%
+C_fw016 biopsy:chr1 156084797>C VAF=18.18%
+C_fw016 biopsy:chr1 156084858>G VAF=22.22%
+C_fw016 biopsy:chr1 198553320>C VAF=10.42%
+C_fw016 biopsy:chr1 198553357>C VAF=36.36%
+
+=== Checking for resistance mutations ===
+===================================================================
+Searching for Known Resistance Mutations (from Table 4)
+===================================================================
+
+No exact matches to Table 4 resistance mutations found.
+
+This could mean:
+  1. Patient C_fw019 doesn't have these specific mutations
+  2. Different chromosome naming (checking both formats)
+  3. Low coverage at these positions
+  4. VAF below detection threshold
+
+Let's check what's in the KRAS region (chr12:25,000,000-26,000,000):
+
+--- C_fw016_biopsy KRAS region ---
+chr12:25352942 G>A
+chr12:25352954 G>A
+chr12:25423520 C>T
+chr12:25423521 T>A
+chr12:25423541 C>T
+chr12:25423550 G>C
+chr12:25423553 C>T
+--- C_fw016_plasma_tp2.0 KRAS region ---
+chr12:25403573 A>C
+chr12:25403604 A>C
+chr12:25403606 T>C
+chr12:25403615 G>C
+--- C_fw016_plasma_tp3.0 KRAS region ---
+chr12:25380052 A>T
+--- C_fw016_plasma_tp6.0 KRAS region ---
+--- C_fw017_biopsy KRAS region ---
+--- C_fw017_plasma_baseline KRAS region ---
+chr12:25408134 C>A
+--- C_fw017_plasma_tp2.0 KRAS region ---
+--- C_fw017_plasma_tp6.0 KRAS region ---
+--- C_fw019_biopsy KRAS region ---
+chr12:25337869 C>G
+chr12:25337875 A>C
+chr12:25337898 T>C
+--- C_fw019_plasma_baseline KRAS region ---
+--- C_fw019_plasma_tp2.0 KRAS region ---
+--- C_fw019_plasma_tp2 KRAS region ---
+--- C_fw019_plasma_tp5.0 KRAS region ---
+chr12:25403573 A>C
+--- C_fw019_plasma_tp5 KRAS region ---
+chr12:25403573 A>C
+--- C_fw028_biopsy KRAS region ---
+--- C_fw028_plasma_baseline KRAS region ---
+--- C_fw028_plasma_tp2.0 KRAS region ---
+--- C_fw028_plasma_tp5.0 KRAS region ---
+chr12:25403602 T>C
+chr12:25403604 A>C
+chr12:25403606 T>C
+chr12:25403615 G>C
+--- C_fw030_biopsy KRAS region ---
+--- C_fw030_plasma_baseline KRAS region ---
+--- C_fw030_plasma_tp2.0 KRAS region ---
+--- C_fw030_plasma_tp4.0 KRAS region ---
+chr12:25403573 A>C
+
+===================================================================
+Checking broader gene regions for any somatic variants:
+===================================================================
+
+KRAS region (chr12:25.2M-25.25M) - any somatic SNPs:
+  C_fw016_biopsy: 0 variants
+  C_fw016_plasma_tp2.0: 0 variants
+  C_fw016_plasma_tp3.0: 0 variants
+  C_fw016_plasma_tp6.0: 0 variants
+  C_fw017_biopsy: 0 variants
+  C_fw017_plasma_baseline: 0 variants
+  C_fw017_plasma_tp2.0: 0 variants
+  C_fw017_plasma_tp6.0: 0 variants
+  C_fw019_biopsy: 0 variants
+  C_fw019_plasma_baseline: 0 variants
+  C_fw019_plasma_tp2.0: 0 variants
+  C_fw019_plasma_tp2: 0 variants
+  C_fw019_plasma_tp5.0: 0 variants
+  C_fw019_plasma_tp5: 0 variants
+  C_fw028_biopsy: 0 variants
+  C_fw028_plasma_baseline: 0 variants
+  C_fw028_plasma_tp2.0: 0 variants
+  C_fw028_plasma_tp5.0: 0 variants
+  C_fw030_biopsy: 0 variants
+  C_fw030_plasma_baseline: 0 variants
+  C_fw030_plasma_tp2.0: 0 variants
+  C_fw030_plasma_tp4.0: 0 variants
+
+MAP2K1 region (chr15:66.68M-66.78M) - any somatic SNPs:
+  C_fw016_biopsy: 9 variants
+  C_fw016_plasma_tp2.0: 1 variants
+  C_fw016_plasma_tp3.0: 0 variants
+  C_fw016_plasma_tp6.0: 2 variants
+  C_fw017_biopsy: 0 variants
+  C_fw017_plasma_baseline: 2 variants
+  C_fw017_plasma_tp2.0: 0 variants
+  C_fw017_plasma_tp6.0: 2 variants
+  C_fw019_biopsy: 6 variants
+  C_fw019_plasma_baseline: 2 variants
+  C_fw019_plasma_tp2.0: 0 variants
+  C_fw019_plasma_tp2: 0 variants
+  C_fw019_plasma_tp5.0: 3 variants
+  C_fw019_plasma_tp5: 3 variants
+  C_fw028_biopsy: 0 variants
+  C_fw028_plasma_baseline: 0 variants
+  C_fw028_plasma_tp2.0: 0 variants
+  C_fw028_plasma_tp5.0: 0 variants
+  C_fw030_biopsy: 0 variants
+  C_fw030_plasma_baseline: 0 variants
+  C_fw030_plasma_tp2.0: 0 variants
+  C_fw030_plasma_tp4.0: 0 variants
+
+TP53 region (chr17:7.571M-7.59M) - any somatic SNPs:
+  C_fw016_biopsy: 14 variants
+  C_fw016_plasma_tp2.0: 0 variants
+  C_fw016_plasma_tp3.0: 0 variants
+  C_fw016_plasma_tp6.0: 0 variants
+  C_fw017_biopsy: 1 variants
+  C_fw017_plasma_baseline: 0 variants
+  C_fw017_plasma_tp2.0: 0 variants
+  C_fw017_plasma_tp6.0: 0 variants
+  C_fw019_biopsy: 12 variants
+  C_fw019_plasma_baseline: 0 variants
+  C_fw019_plasma_tp2.0: 0 variants
+  C_fw019_plasma_tp2: 0 variants
+  C_fw019_plasma_tp5.0: 0 variants
+  C_fw019_plasma_tp5: 0 variants
+  C_fw028_biopsy: 1 variants
+  C_fw028_plasma_baseline: 0 variants
+  C_fw028_plasma_tp2.0: 0 variants
+  C_fw028_plasma_tp5.0: 0 variants
+  C_fw030_biopsy: 1 variants
+  C_fw030_plasma_baseline: 0 variants
+  C_fw030_plasma_tp2.0: 0 variants
+  C_fw030_plasma_tp4.0: 0 variants
