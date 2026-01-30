@@ -179,6 +179,14 @@ workflow {
     VARSCAN_SOMATIC(SAMTOOLS_MPILEUP.out.pileups)
 
     VARSCAN_PROCESS(VARSCAN_SOMATIC.out.variants)
+
+    // =========================================================================
+    // SUMMARIZE AND AGGREGATE RESULTS
+    // =========================================================================
+    SUMMARIZE_VARIANTS(VARSCAN_PROCESS.out.somatic_hc)
+
+    // Collect all variant summaries and create combined table
+    AGGREGATE_RESULTS(SUMMARIZE_VARIANTS.out.summary.map { patient, sample_type, tsv -> tsv }.collect())
 }
 
 // =============================================================================
@@ -532,5 +540,72 @@ process VARSCAN_PROCESS {
         --min-tumor-freq ${params.min_var_freq} \\
         --max-normal-freq 0.05 \\
         --p-value ${params.somatic_p_value}
+    """
+}
+
+process SUMMARIZE_VARIANTS {
+    tag "patient${patient}_${sample_type}"
+    publishDir "${params.varscan_results}/summaries", mode: 'copy'
+
+    input:
+    tuple val(patient), val(sample_type),
+          path(snp_vcf), path(indel_vcf)
+
+    output:
+    tuple val(patient), val(sample_type), path("${patient}_${sample_type}_variants.tsv"), emit: summary
+
+    script:
+    """
+    summarize_variants.py ${patient} ${sample_type} ${snp_vcf} ${indel_vcf} ${patient}_${sample_type}_variants.tsv
+    """
+}
+
+process AGGREGATE_RESULTS {
+    publishDir "${params.varscan_results}", mode: 'copy'
+
+    input:
+    path(variant_tsvs)
+
+    output:
+    path("all_variants_summary.tsv"), emit: combined_summary
+
+    script:
+    """
+    #!/usr/bin/env python3
+    import pandas as pd
+    from pathlib import Path
+
+    # Read all TSV files and combine
+    all_dfs = []
+    for tsv_file in Path('.').glob('*_variants.tsv'):
+        try:
+            df = pd.read_csv(tsv_file, sep='\\t')
+            if len(df) > 0:
+                all_dfs.append(df)
+        except Exception as e:
+            print(f"Warning: Could not read {tsv_file}: {e}")
+
+    if all_dfs:
+        combined = pd.concat(all_dfs, ignore_index=True)
+
+        # Sort by patient, sample type, chromosome, position
+        combined['chr_num'] = combined['chr'].str.replace('chr', '').replace('X', '23').replace('Y', '24').replace('M', '25')
+        combined['chr_num'] = pd.to_numeric(combined['chr_num'], errors='coerce')
+        combined = combined.sort_values(['patient', 'sample_type', 'chr_num', 'pos'])
+        combined = combined.drop('chr_num', axis=1)
+
+        combined.to_csv('all_variants_summary.tsv', sep='\\t', index=False)
+
+        print(f"\\n=== Overall Summary ===")
+        print(f"Total variants across all samples: {len(combined)}")
+        print(f"Somatic variants: {len(combined[combined['somatic_status'] == 'Somatic'])}")
+        print(f"\\nVariants per patient:")
+        print(combined.groupby('patient').size())
+        print(f"\\nVariants per sample type:")
+        print(combined.groupby(['patient', 'sample_type']).size())
+    else:
+        # Create empty file if no variants found
+        pd.DataFrame().to_csv('all_variants_summary.tsv', sep='\\t', index=False)
+        print("No variants found in any sample")
     """
 }
