@@ -61,6 +61,7 @@ workflow {
     BWA_INDEX(DOWNLOAD_HG19.out.hg19)
     INDEX_FASTA(DOWNLOAD_HG19.out.hg19)
     DOWNLOAD_GATK_RESOURCES()
+    DOWNLOAD_SNPEFF_DB()
 
     // =========================================================================
     // PREPROCESS ALL UNIQUE SAMPLES
@@ -78,8 +79,8 @@ workflow {
     // =========================================================================
     // PAIR TUMOR AND NORMAL SAMPLES BY PATIENT
     // =========================================================================
-    // 
-    // Goal: For each row in samples.csv, match the processed tumor BAM 
+    //
+    // Goal: For each row in samples.csv, match the processed tumor BAM
     //       with its corresponding normal BAM from the same patient.
     //
     // Input (samples_ch from CSV):
@@ -181,9 +182,17 @@ workflow {
     VARSCAN_PROCESS(VARSCAN_SOMATIC.out.variants)
 
     // =========================================================================
+    // VARIANT ANNOTATION
+    // =========================================================================
+    SNPEFF_ANNOTATE(
+        VARSCAN_PROCESS.out.somatic_hc,
+        DOWNLOAD_SNPEFF_DB.out.db_dir.collect()
+    )
+
+    // =========================================================================
     // SUMMARIZE AND AGGREGATE RESULTS
     // =========================================================================
-    SUMMARIZE_VARIANTS(VARSCAN_PROCESS.out.somatic_hc)
+    SUMMARIZE_VARIANTS(SNPEFF_ANNOTATE.out.annotated_vcf)
 
     // Collect all variant summaries and create combined table
     AGGREGATE_RESULTS(SUMMARIZE_VARIANTS.out.summary.map { patient, sample_type, tsv -> tsv }.collect())
@@ -233,6 +242,21 @@ process DOWNLOAD_GATK_RESOURCES {
     # Using latest_release which points to most recent build
     wget https://ftp.ncbi.nih.gov/snp/latest_release/VCF/GCF_000001405.25.gz -O dbsnp_138.hg19.vcf.gz
     wget https://ftp.ncbi.nih.gov/snp/latest_release/VCF/GCF_000001405.25.gz.tbi -O dbsnp_138.hg19.vcf.gz.tbi
+    """
+}
+
+process DOWNLOAD_SNPEFF_DB {
+    tag "snpeff-db"
+    label "download"
+    storeDir "${params.outdir}/snpeff_data"
+
+    output:
+    path("GRCh37.75"), emit: db_dir
+
+    script:
+    """
+    # Download SnpEff database for hg19 (GRCh37.75)
+    snpEff download -v GRCh37.75 -dataDir .
     """
 }
 
@@ -540,6 +564,41 @@ process VARSCAN_PROCESS {
         --min-tumor-freq ${params.min_var_freq} \\
         --max-normal-freq 0.05 \\
         --p-value ${params.somatic_p_value}
+    """
+}
+
+process SNPEFF_ANNOTATE {
+    tag "patient${patient}_${sample_type}"
+    label "snpeff"
+    publishDir "${params.varscan_results}/annotated", mode: 'copy'
+
+    input:
+    tuple val(patient), val(sample_type),
+          path(snp_vcf), path(indel_vcf)
+    path(snpeff_db)
+
+    output:
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}.snp.ann.vcf"),
+          path("${patient}_${sample_type}.indel.ann.vcf"), emit: annotated_vcf
+    path("*.html"), emit: reports
+
+    script:
+    def prefix = "${patient}_${sample_type}"
+    """
+    # Annotate SNPs
+    snpEff ann -v GRCh37.75 \\
+        -dataDir ${snpeff_db.parent} \\
+        -stats ${prefix}.snp.html \\
+        ${snp_vcf} \\
+        > ${prefix}.snp.ann.vcf
+
+    # Annotate INDELs
+    snpEff ann -v GRCh37.75 \\
+        -dataDir ${snpeff_db.parent} \\
+        -stats ${prefix}.indel.html \\
+        ${indel_vcf} \\
+        > ${prefix}.indel.ann.vcf
     """
 }
 
