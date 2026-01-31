@@ -13,6 +13,35 @@ from pathlib import Path
 # Key genes from Table 4 (resistance mutations)
 RESISTANCE_GENES = ['KRAS', 'MAP2K1', 'TP53', 'APC', 'PTEN', 'BRAF', 'NRAS', 'PIK3CA']
 
+def parse_snpeff_annotation(ann_string):
+    """
+    Parse SnpEff ANN field.
+    Format: Allele|Annotation|Impact|Gene_Name|Gene_ID|Feature_Type|Feature_ID|
+            Transcript_BioType|Rank|HGVS.c|HGVS.p|cDNA.pos/cDNA.length|CDS.pos/CDS.length|
+            AA.pos/AA.length|Distance|ERRORS/WARNINGS/INFO
+
+    Returns dict with gene, effect, impact, and protein change.
+    """
+    if not ann_string:
+        return {'gene': None, 'effect': None, 'impact': None, 'protein_change': None}
+
+    # SnpEff may have multiple annotations separated by comma
+    # Take the first (usually most severe)
+    annotations = ann_string.split(',')
+    if not annotations:
+        return {'gene': None, 'effect': None, 'impact': None, 'protein_change': None}
+
+    fields = annotations[0].split('|')
+    if len(fields) < 11:
+        return {'gene': None, 'effect': None, 'impact': None, 'protein_change': None}
+
+    return {
+        'gene': fields[3] if fields[3] else None,  # Gene_Name
+        'effect': fields[1] if fields[1] else None,  # Annotation (e.g., missense_variant)
+        'impact': fields[2] if fields[2] else None,  # Impact (HIGH, MODERATE, LOW, MODIFIER)
+        'protein_change': fields[10] if fields[10] else None  # HGVS.p (e.g., p.Gly12Asp)
+    }
+
 def parse_vcf_line(line, patient, sample_type):
     """Parse a VCF data line and extract key information."""
     fields = line.strip().split('\t')
@@ -58,6 +87,9 @@ def parse_vcf_line(line, patient, sample_type):
     # Get somatic p-value
     ssc = info_dict.get('SSC', 'NA')
 
+    # Parse SnpEff annotation if present
+    ann_info = parse_snpeff_annotation(info_dict.get('ANN', ''))
+
     variant = {
         'patient': patient,
         'sample_type': sample_type,
@@ -66,6 +98,10 @@ def parse_vcf_line(line, patient, sample_type):
         'ref': ref,
         'alt': alt,
         'vaf': vaf,
+        'gene': ann_info['gene'],
+        'effect': ann_info['effect'],
+        'impact': ann_info['impact'],
+        'protein_change': ann_info['protein_change'],
         'somatic_status': somatic_status,
         'somatic_score': ssc,
         'info': info_dict
@@ -111,13 +147,24 @@ def main():
         # Create empty output file
         pd.DataFrame(columns=[
             'patient', 'sample_type', 'chr', 'pos', 'ref', 'alt',
-            'vaf', 'somatic_status', 'somatic_score'
+            'vaf', 'gene', 'effect', 'impact', 'protein_change',
+            'somatic_status', 'somatic_score'
         ]).to_csv(output_file, sep='\t', index=False)
         print(f"No variants found. Created empty file: {output_file}")
         return
 
     # Convert to DataFrame
     df = pd.DataFrame(all_variants)
+
+    # Reorder columns for better readability
+    column_order = [
+        'patient', 'sample_type', 'chr', 'pos', 'ref', 'alt', 'vaf',
+        'gene', 'effect', 'impact', 'protein_change',
+        'somatic_status', 'somatic_score'
+    ]
+    # Only include columns that exist
+    existing_cols = [col for col in column_order if col in df.columns]
+    df = df[existing_cols]
 
     # Sort by chromosome and position
     df['chr_num'] = df['chr'].str.replace('chr', '').replace('X', '23').replace('Y', '24').replace('M', '25')
@@ -133,11 +180,20 @@ def main():
     print(f"Total variants: {len(df)}")
     print(f"Somatic variants: {len(df[df['somatic_status'] == 'Somatic'])}")
 
+    # Show resistance gene variants if any
+    if 'gene' in df.columns:
+        somatic_df = df[df['somatic_status'] == 'Somatic']
+        resistance_vars = somatic_df[somatic_df['gene'].isin(RESISTANCE_GENES)]
+        if len(resistance_vars) > 0:
+            print(f"\nResistance gene variants ({len(resistance_vars)} found):")
+            print(resistance_vars[['gene', 'chr', 'pos', 'effect', 'protein_change', 'vaf']].to_string(index=False))
+
     if 'vaf' in df.columns:
         somatic_df = df[df['somatic_status'] == 'Somatic']
         if len(somatic_df) > 0:
             print(f"\nTop somatic variants by VAF:")
-            top_variants = somatic_df.nlargest(10, 'vaf')[['chr', 'pos', 'ref', 'alt', 'vaf']]
+            display_cols = ['chr', 'pos', 'gene', 'effect', 'protein_change', 'vaf'] if 'gene' in df.columns else ['chr', 'pos', 'ref', 'alt', 'vaf']
+            top_variants = somatic_df.nlargest(10, 'vaf')[display_cols]
             print(top_variants.to_string(index=False))
 
     print(f"\nSaved to: {output_file}")
