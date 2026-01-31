@@ -1,1 +1,13 @@
 .nextflow*
+*.bam
+*.bam.bai
+*.fastq
+*.command.*
+*.exitcode
+*.gz
+*.vcf
+work/
+test_results
+individidual_patient_sample_lists/
+*.fa*
+*.dict
