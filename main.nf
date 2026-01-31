@@ -61,7 +61,6 @@ workflow {
     BWA_INDEX(DOWNLOAD_HG19.out.hg19)
     INDEX_FASTA(DOWNLOAD_HG19.out.hg19)
     DOWNLOAD_GATK_RESOURCES()
-    DOWNLOAD_SNPEFF_DB()
 
     // =========================================================================
     // PREPROCESS ALL UNIQUE SAMPLES
@@ -184,10 +183,7 @@ workflow {
     // =========================================================================
     // VARIANT ANNOTATION
     // =========================================================================
-    SNPEFF_ANNOTATE(
-        VARSCAN_PROCESS.out.somatic_hc,
-        DOWNLOAD_SNPEFF_DB.out.db_dir.collect()
-    )
+    SNPEFF_ANNOTATE(VARSCAN_PROCESS.out.somatic_hc)
 
     // =========================================================================
     // SUMMARIZE AND AGGREGATE RESULTS
@@ -245,20 +241,8 @@ process DOWNLOAD_GATK_RESOURCES {
     """
 }
 
-process DOWNLOAD_SNPEFF_DB {
-    tag "snpeff-db"
-    label "download"
-    storeDir "${params.outdir}/snpeff_data"
-
-    output:
-    path("GRCh37.75"), emit: db_dir
-
-    script:
-    """
-    # Download SnpEff database for hg19 (GRCh37.75)
-    snpEff download -v GRCh37.75 -dataDir .
-    """
-}
+// Note: SnpEff database (GRCh37.75) is installed globally in conda environment
+// No need to download as a separate process
 
 // =============================================================================
 // INDEXING PROCESSES
@@ -575,7 +559,6 @@ process SNPEFF_ANNOTATE {
     input:
     tuple val(patient), val(sample_type),
           path(snp_vcf), path(indel_vcf)
-    path(snpeff_db)
 
     output:
     tuple val(patient), val(sample_type),
@@ -586,16 +569,14 @@ process SNPEFF_ANNOTATE {
     script:
     def prefix = "${patient}_${sample_type}"
     """
-    # Annotate SNPs
+    # Annotate SNPs (uses database from conda environment)
     snpEff ann -v GRCh37.75 \\
-        -dataDir ${snpeff_db.parent} \\
         -stats ${prefix}.snp.html \\
         ${snp_vcf} \\
         > ${prefix}.snp.ann.vcf
 
-    # Annotate INDELs
+    # Annotate INDELs (uses database from conda environment)
     snpEff ann -v GRCh37.75 \\
-        -dataDir ${snpeff_db.parent} \\
         -stats ${prefix}.indel.html \\
         ${indel_vcf} \\
         > ${prefix}.indel.ann.vcf
