@@ -570,13 +570,13 @@ process SNPEFF_ANNOTATE {
     def prefix = "${patient}_${sample_type}"
     """
     # Annotate SNPs (uses database from conda environment)
-    snpEff ann -v GRCh37.75 \\
+    snpEff ann -v -nodownload GRCh37.75 \\
         -stats ${prefix}.snp.html \\
         ${snp_vcf} \\
         > ${prefix}.snp.ann.vcf
 
     # Annotate INDELs (uses database from conda environment)
-    snpEff ann -v GRCh37.75 \\
+    snpEff ann -v -nodownload GRCh37.75 \\
         -stats ${prefix}.indel.html \\
         ${indel_vcf} \\
         > ${prefix}.indel.ann.vcf
