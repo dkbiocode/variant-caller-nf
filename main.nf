@@ -568,15 +568,16 @@ process SNPEFF_ANNOTATE {
 
     script:
     def prefix = "${patient}_${sample_type}"
+    def mem_gb = task.memory ? (task.memory.toGiga() - 1) : 7  // Leave 1GB for overhead
     """
     # Annotate SNPs (uses database from conda environment)
-    snpEff ann -v -nodownload GRCh37.75 \\
+    snpEff ann -Xmx${mem_gb}g -v -nodownload GRCh37.75 \\
         -stats ${prefix}.snp.html \\
         ${snp_vcf} \\
         > ${prefix}.snp.ann.vcf
 
     # Annotate INDELs (uses database from conda environment)
-    snpEff ann -v -nodownload GRCh37.75 \\
+    snpEff ann -Xmx${mem_gb}g -v -nodownload GRCh37.75 \\
         -stats ${prefix}.indel.html \\
         ${indel_vcf} \\
         > ${prefix}.indel.ann.vcf
