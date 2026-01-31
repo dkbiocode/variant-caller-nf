@@ -605,6 +605,7 @@ process SNPEFF_ANNOTATE {
 process SUMMARIZE_VARIANTS {
     tag "patient${patient}_${sample_type}"
     publishDir "${params.varscan_results}/summaries", mode: 'copy'
+    label "super_basic"
 
     input:
     tuple val(patient), val(sample_type),
@@ -620,6 +621,7 @@ process SUMMARIZE_VARIANTS {
 }
 
 process AGGREGATE_RESULTS {
+    label "super_basic"
     publishDir "${params.varscan_results}", mode: 'copy'
 
     input:
