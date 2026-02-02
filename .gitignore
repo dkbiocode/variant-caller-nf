@@ -11,3 +11,4 @@ test_results
 individidual_patient_sample_lists/
 *.fa*
 *.dict
+.Rproj.user
