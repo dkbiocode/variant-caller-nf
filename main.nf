@@ -186,12 +186,28 @@ workflow {
     SNPEFF_ANNOTATE(VARSCAN_PROCESS.out.somatic_hc)
 
     // =========================================================================
+    // VCF QUALITY CONTROL
+    // =========================================================================
+    VCF_STATS(SNPEFF_ANNOTATE.out.annotated_vcf)
+
+    // =========================================================================
     // SUMMARIZE AND AGGREGATE RESULTS
     // =========================================================================
     SUMMARIZE_VARIANTS(SNPEFF_ANNOTATE.out.annotated_vcf)
 
     // Collect all variant summaries and create combined table
     AGGREGATE_RESULTS(SUMMARIZE_VARIANTS.out.summary.map { patient, sample_type, tsv -> tsv }.collect())
+
+    // =========================================================================
+    // MULTIQC - AGGREGATE ALL QC REPORTS
+    // =========================================================================
+    MULTIQC(
+        FASTP.out.json.collect(),
+        FASTP.out.html.collect(),
+        MARKDUPS.out.metrics.collect(),
+        SNPEFF_ANNOTATE.out.reports.collect(),
+        VCF_STATS.out.snp_stats.mix(VCF_STATS.out.indel_stats).collect()
+    )
 }
 
 // =============================================================================
@@ -584,6 +600,29 @@ process SNPEFF_ANNOTATE {
     """
 }
 
+process VCF_STATS {
+    tag "patient${patient}_${sample_type}"
+    label "basic"
+    publishDir "${params.varscan_results}/vcf_stats", mode: 'copy'
+
+    input:
+    tuple val(patient), val(sample_type),
+          path(snp_vcf), path(indel_vcf)
+
+    output:
+    path("${patient}_${sample_type}.snp.stats.txt"), emit: snp_stats
+    path("${patient}_${sample_type}.indel.stats.txt"), emit: indel_stats
+
+    script:
+    """
+    # Generate statistics for SNP VCF
+    bcftools stats ${snp_vcf} > ${patient}_${sample_type}.snp.stats.txt
+
+    # Generate statistics for INDEL VCF
+    bcftools stats ${indel_vcf} > ${patient}_${sample_type}.indel.stats.txt
+    """
+}
+
 process SUMMARIZE_VARIANTS {
     tag "patient${patient}_${sample_type}"
     publishDir "${params.varscan_results}/summaries", mode: 'copy'
@@ -650,5 +689,30 @@ process AGGREGATE_RESULTS {
         # Create empty file if no variants found
         pd.DataFrame().to_csv('all_variants_summary.tsv', sep='\\t', index=False)
         print("No variants found in any sample")
+    """
+}
+
+process MULTIQC {
+    label "super_basic"
+    publishDir "${params.outdir}/multiqc", mode: 'copy'
+
+    input:
+    path(fastp_json)
+    path(fastp_html)
+    path(markdup_metrics)
+    path(snpeff_html)
+    path(vcf_stats)
+
+    output:
+    path("multiqc_report.html"), emit: report
+    path("multiqc_data/"), emit: data
+
+    script:
+    """
+    multiqc . \\
+        --filename multiqc_report.html \\
+        --title "ctDNA Variant Calling Pipeline QC" \\
+        --comment "Quality control metrics for 22-patient colorectal cancer cohort" \\
+        --force
     """
 }
