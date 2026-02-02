@@ -198,6 +198,9 @@ workflow {
     // Collect all variant summaries and create combined table
     AGGREGATE_RESULTS(SUMMARIZE_VARIANTS.out.summary.map { patient, sample_type, tsv -> tsv }.collect())
 
+    // Extract somatic scores for custom MultiQC visualization
+    EXTRACT_SOMATIC_SCORES(AGGREGATE_RESULTS.out.combined_summary)
+
     // =========================================================================
     // MULTIQC - AGGREGATE ALL QC REPORTS
     // =========================================================================
@@ -206,7 +209,8 @@ workflow {
         FASTP.out.html.collect(),
         MARKDUPS.out.metrics.collect(),
         SNPEFF_ANNOTATE.out.reports.collect(),
-        VCF_STATS.out.snp_stats.mix(VCF_STATS.out.indel_stats).collect()
+        VCF_STATS.out.snp_stats.mix(VCF_STATS.out.indel_stats).collect(),
+        EXTRACT_SOMATIC_SCORES.out.custom_content
     )
 }
 
@@ -692,6 +696,22 @@ process AGGREGATE_RESULTS {
     """
 }
 
+process EXTRACT_SOMATIC_SCORES {
+    label "super_basic"
+    publishDir "${params.outdir}/multiqc", mode: 'copy'
+
+    input:
+    path(all_variants_summary)
+
+    output:
+    path("somatic_scores_mqc.yaml"), emit: custom_content
+
+    script:
+    """
+    extract_somatic_scores.py ${all_variants_summary} somatic_scores_mqc.yaml
+    """
+}
+
 process MULTIQC {
     label "super_basic"
     publishDir "${params.outdir}/multiqc", mode: 'copy'
@@ -702,6 +722,7 @@ process MULTIQC {
     path(markdup_metrics)
     path(snpeff_html)
     path(vcf_stats)
+    path(somatic_scores)
 
     output:
     path("multiqc_report.html"), emit: report
