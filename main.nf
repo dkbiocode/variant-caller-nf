@@ -180,15 +180,18 @@ workflow {
 
     VARSCAN_PROCESS(VARSCAN_SOMATIC.out.variants)
 
+    // Fix QUAL field: Copy SSC to QUAL for proper quality distribution plots
+    FIX_VARSCAN_QUAL(VARSCAN_PROCESS.out.somatic_hc)
+
     // =========================================================================
     // VARIANT ANNOTATION
     // =========================================================================
-    SNPEFF_ANNOTATE(VARSCAN_PROCESS.out.somatic_hc)
+    SNPEFF_ANNOTATE(FIX_VARSCAN_QUAL.out.qual_fixed)
 
     // =========================================================================
     // VCF QUALITY CONTROL
     // =========================================================================
-    VCF_STATS(SNPEFF_ANNOTATE.out.annotated_vcf)
+    VCF_STATS(FIX_VARSCAN_QUAL.out.qual_fixed)
 
     // =========================================================================
     // SUMMARIZE AND AGGREGATE RESULTS
@@ -568,6 +571,52 @@ process VARSCAN_PROCESS {
         --min-tumor-freq ${params.min_var_freq} \\
         --max-normal-freq 0.05 \\
         --p-value ${params.somatic_p_value}
+    """
+}
+
+process FIX_VARSCAN_QUAL {
+    tag "patient${patient}_${sample_type}"
+    label "basic"
+    publishDir "${params.varscan_results}/qual_fixed", mode: 'copy'
+
+    input:
+    tuple val(patient), val(sample_type),
+          path(snp_vcf), path(indel_vcf)
+
+    output:
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}.snp.qual_fixed.vcf"),
+          path("${patient}_${sample_type}.indel.qual_fixed.vcf"), emit: qual_fixed
+
+    script:
+    def prefix = "${patient}_${sample_type}"
+    """
+    # Fix QUAL field by copying SSC (Somatic Score) value from INFO field
+    # VarScan sets QUAL=0 by default, but stores quality in INFO/SSC
+
+    # For SNPs: extract SSC and set as QUAL
+    awk 'BEGIN{OFS="\\t"}
+         /^#/ {print; next}
+         {
+             # Extract SSC value from INFO field
+             match(\$8, /SSC=([0-9]+)/, arr)
+             if (arr[1] != "") {
+                 \$6 = arr[1]  # Replace QUAL with SSC
+             }
+             print
+         }' ${snp_vcf} > ${prefix}.snp.qual_fixed.vcf
+
+    # For Indels: extract SSC and set as QUAL
+    awk 'BEGIN{OFS="\\t"}
+         /^#/ {print; next}
+         {
+             # Extract SSC value from INFO field
+             match(\$8, /SSC=([0-9]+)/, arr)
+             if (arr[1] != "") {
+                 \$6 = arr[1]  # Replace QUAL with SSC
+             }
+             print
+         }' ${indel_vcf} > ${prefix}.indel.qual_fixed.vcf
     """
 }
 
