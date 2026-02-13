@@ -662,7 +662,7 @@ process LOFREQ_CALL {
     // lofreq appends suffixes directly to prefix with no separator
     // so we add trailing underscore: C_fw005_biopsy_ + somatic_final.snvs.vcf.gz
     def prefix = "${patient}_${sample_type}_"
-    def dbsnp = "${params.gatk_resources}/dbsnp_138.hg19.vcf.gz"
+    def dbsnp = file("${params.gatk_resources}/dbsnp_138.hg19.vcf.gz")
     """
     # LoFreq somatic variant calling with tumor-normal pairs
     lofreq somatic \\
