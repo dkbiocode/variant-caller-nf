@@ -10,6 +10,7 @@ params.hg19 = "${params.outdir}/hg19"
 params.bwa_index_prefix = "hg19"
 params.gatk_resources = "${params.outdir}/gatk_resources"
 params.varscan_results = "${params.outdir}/varscan"
+params.lofreq_results = "${params.outdir}/lofreq"
 
 // VarScan parameters
 params.min_coverage = 8
@@ -180,13 +181,29 @@ workflow {
 
     VARSCAN_PROCESS(VARSCAN_SOMATIC.out.variants)
 
-    // Fix QUAL field: Copy SSC to QUAL for proper quality distribution plots
-    FIX_VARSCAN_QUAL(VARSCAN_PROCESS.out.somatic_hc)
+    // =========================================================================
+    // LOFREQ VARIANT CALLING (PARALLEL BRANCH)
+    // =========================================================================
+    LOFREQ_CALL(
+        paired_samples,
+        DOWNLOAD_HG19.out.hg19.collect(),
+        INDEX_FASTA.out.indexed_fasta.collect()
+    )
+
+    LOFREQ_DECOMPRESS(LOFREQ_CALL.out.lofreq_vcf)
+
+    SNPEFF_ANNOTATE_LOFREQ(LOFREQ_DECOMPRESS.out.lofreq_uncompressed)
+
+    SUMMARIZE_LOFREQ_VARIANTS(SNPEFF_ANNOTATE_LOFREQ.out.annotated_vcf)
 
     // =========================================================================
-    // VARIANT ANNOTATION
+    // VARIANT ANNOTATION (VARSCAN)
     // =========================================================================
-    SNPEFF_ANNOTATE(FIX_VARSCAN_QUAL.out.qual_fixed)
+    SNPEFF_ANNOTATE(VARSCAN_PROCESS.out.somatic_hc)
+
+    // Fix QUAL field AFTER annotation for bcftools stats only
+    // This doesn't affect annotation or summarization, just quality plots
+    FIX_VARSCAN_QUAL(SNPEFF_ANNOTATE.out.annotated_vcf)
 
     // =========================================================================
     // VCF QUALITY CONTROL
@@ -620,6 +637,72 @@ process FIX_VARSCAN_QUAL {
     """
 }
 
+// =============================================================================
+// LOFREQ VARIANT CALLING (PARALLEL BRANCH)
+// =============================================================================
+
+process LOFREQ_CALL {
+    tag "patient${patient}_${sample_type}"
+    label "lofreq"
+    publishDir "${params.lofreq_results}/calls", mode: 'copy'
+
+    input:
+    tuple val(patient), val(tumor_srr), val(normal_srr), val(sample_type),
+          path(tumor_bam), path(tumor_bai),
+          path(normal_bam), path(normal_bai)
+    path(reference_fasta)
+    path(reference_index)
+
+    output:
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}_somatic_final.snvs.vcf.gz"),
+          path("${patient}_${sample_type}_somatic_final.indels.vcf.gz"), emit: lofreq_vcf
+
+    script:
+    def prefix = "${patient}_${sample_type}"
+    """
+    # LoFreq somatic variant calling with tumor-normal pairs
+    # Automatically calls SNVs and indels, applies filters
+    lofreq somatic \\
+        -n ${normal_bam} \\
+        -t ${tumor_bam} \\
+        -f ${reference_fasta} \\
+        -o ${prefix} \\
+        --call-indels \\
+        --threads ${task.cpus}
+
+    # Move final filtered variants to expected names
+    mv ${prefix}_somatic_final.snvs.vcf.gz ${prefix}_somatic_final.snvs.vcf.gz || touch ${prefix}_somatic_final.snvs.vcf.gz
+    mv ${prefix}_somatic_final.indels.vcf.gz ${prefix}_somatic_final.indels.vcf.gz || touch ${prefix}_somatic_final.indels.vcf.gz
+    """
+}
+
+process LOFREQ_DECOMPRESS {
+    tag "patient${patient}_${sample_type}"
+    label "super_basic"
+
+    input:
+    tuple val(patient), val(sample_type),
+          path(snv_vcf_gz), path(indel_vcf_gz)
+
+    output:
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}.lofreq.snv.vcf"),
+          path("${patient}_${sample_type}.lofreq.indel.vcf"), emit: lofreq_uncompressed
+
+    script:
+    def prefix = "${patient}_${sample_type}"
+    """
+    # Decompress VCF files for annotation
+    gunzip -c ${snv_vcf_gz} > ${prefix}.lofreq.snv.vcf
+    gunzip -c ${indel_vcf_gz} > ${prefix}.lofreq.indel.vcf
+    """
+}
+
+// =============================================================================
+// VARSCAN ANNOTATION
+// =============================================================================
+
 process SNPEFF_ANNOTATE {
     tag "patient${patient}_${sample_type}"
     label "snpeff"
@@ -650,6 +733,64 @@ process SNPEFF_ANNOTATE {
         -stats ${prefix}.indel.html \\
         ${indel_vcf} \\
         > ${prefix}.indel.ann.vcf
+    """
+}
+
+// =============================================================================
+// LOFREQ ANNOTATION
+// =============================================================================
+
+process SNPEFF_ANNOTATE_LOFREQ {
+    tag "patient${patient}_${sample_type}"
+    label "snpeff"
+    publishDir "${params.lofreq_results}/annotated", mode: 'copy'
+
+    input:
+    tuple val(patient), val(sample_type),
+          path(snv_vcf), path(indel_vcf)
+
+    output:
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}.lofreq.snv.ann.vcf"),
+          path("${patient}_${sample_type}.lofreq.indel.ann.vcf"), emit: annotated_vcf
+    path("*.html"), emit: reports
+
+    script:
+    def prefix = "${patient}_${sample_type}.lofreq"
+    def mem_gb = task.memory ? (task.memory.toGiga() - 1) : 7
+    """
+    # Annotate LoFreq SNVs
+    snpEff ann -Xmx${mem_gb}g -v -nodownload GRCh37.75 \\
+        -stats ${prefix}.snv.html \\
+        ${snv_vcf} \\
+        > ${prefix}.snv.ann.vcf
+
+    # Annotate LoFreq indels
+    snpEff ann -Xmx${mem_gb}g -v -nodownload GRCh37.75 \\
+        -stats ${prefix}.indel.html \\
+        ${indel_vcf} \\
+        > ${prefix}.indel.ann.vcf
+    """
+}
+
+process SUMMARIZE_LOFREQ_VARIANTS {
+    tag "patient${patient}_${sample_type}"
+    label "super_basic"
+    publishDir "${params.lofreq_results}/summaries", mode: 'copy'
+
+    input:
+    tuple val(patient), val(sample_type),
+          path(snv_vcf), path(indel_vcf)
+
+    output:
+    tuple val(patient), val(sample_type),
+          path("${patient}_${sample_type}_lofreq_variants.tsv"), emit: summary
+
+    script:
+    """
+    # Use the same summarize_variants.py script but for LoFreq VCFs
+    # Note: LoFreq doesn't have SSC field, will extract QUAL instead
+    summarize_lofreq_variants.py ${patient} ${sample_type} ${snv_vcf} ${indel_vcf} ${patient}_${sample_type}_lofreq_variants.tsv
     """
 }
 
