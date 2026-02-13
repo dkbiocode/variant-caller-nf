@@ -659,21 +659,20 @@ process LOFREQ_CALL {
           path("${patient}_${sample_type}_somatic_final.indels.vcf.gz"), emit: lofreq_vcf
 
     script:
-    def prefix = "${patient}_${sample_type}"
+    // lofreq appends suffixes directly to prefix with no separator
+    // so we add trailing underscore: C_fw005_biopsy_ + somatic_final.snvs.vcf.gz
+    def prefix = "${patient}_${sample_type}_"
+    def dbsnp = "${params.gatk_resources}/dbsnp_138.hg19.vcf.gz"
     """
     # LoFreq somatic variant calling with tumor-normal pairs
-    # Automatically calls SNVs and indels, applies filters
     lofreq somatic \\
         -n ${normal_bam} \\
         -t ${tumor_bam} \\
         -f ${reference_fasta} \\
         -o ${prefix} \\
         --call-indels \\
-        --threads ${task.cpus}
-
-    # Move final filtered variants to expected names
-    mv ${prefix}_somatic_final.snvs.vcf.gz ${prefix}_somatic_final.snvs.vcf.gz || touch ${prefix}_somatic_final.snvs.vcf.gz
-    mv ${prefix}_somatic_final.indels.vcf.gz ${prefix}_somatic_final.indels.vcf.gz || touch ${prefix}_somatic_final.indels.vcf.gz
+        --threads ${task.cpus} \\
+        --dbs ${dbsnp}
     """
 }
 
