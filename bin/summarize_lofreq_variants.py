@@ -35,7 +35,8 @@ def parse_vcf_line(line, patient, sample_type):
     """Parse a LoFreq VCF data line and extract key information."""
     fields = line.strip().split('\t')
 
-    if len(fields) < 10:
+    # LoFreq VCFs have 8 columns (no FORMAT/sample columns)
+    if len(fields) < 8:
         return None
 
     chrom = fields[0]
@@ -44,8 +45,6 @@ def parse_vcf_line(line, patient, sample_type):
     alt = fields[4]
     qual = fields[5]
     info = fields[7]
-    format_fields = fields[8].split(':')
-    sample_data = fields[9].split(':')
 
     # Parse INFO field
     info_dict = {}
