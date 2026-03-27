@@ -1,6 +1,14 @@
 ## Variant caller
 
-This nextflow pipeline calls variants on illumina reads, and has modifications to track mutations in tumor biopsies after Lim et al. (2021)[^1], 
+Treatment resistant tumors develop as a result of positive selection in the pathways which a pharmaceutical agent targets. An example is the epidermal growth factor receptor gene EGFR accumulating a mutation that results in constitutive activation, while anti-EGFR treatment is meant to interrupt signaling in that pathway. 
+
+### Approach
+
+To track the progression of resistance to treatment, the authors in Lim et al. (2021)[^1] use circulating tumor DNA to detect changes in the patients' tumor genotype, using somatic controls and multiple time points of liquid biopsy. 
+
+### Workflow 
+
+This nextflow pipeline calls variants on Illumina reads, and has modifications to track mutations in tumor biopsies after Lim et al. (2021)[^1], 
 which follows patients with colorectal cancer who become resistant to anti-EGFR treatment.
 
 ### Features
