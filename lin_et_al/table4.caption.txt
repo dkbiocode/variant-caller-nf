@@ -1,0 +1,2 @@
+List of candidate resistance mutations arisen during anti-EGFR treatment. The variants were
+previously known for pathogenic or likely pathogenic mutations by ClinVar database.

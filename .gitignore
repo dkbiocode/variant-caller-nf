@@ -1,3 +1,5 @@
+.DS_Store
+.Rhistory
 .nextflow*
 *.bam
 *.bam.bai

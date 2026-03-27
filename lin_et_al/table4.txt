@@ -1,0 +1,12 @@
+ID Chr Start End Ref Alt Functional Gene "Base change" "AA change" VAF (%) ClinVar dbSNP
+CTDC05 12 25398284 25398284 C A missense_variant KRAS "c.35G > T" p.Gly12Val 1.74 Pathogenic/Likely_pathogenic rs12191352
+CTDC07 15 66727455 66727455 G T missense_variant MAP2K1 "c.171G > T" p.Lys57Asn 3.05 Pathogenic/Likely_pathogenic NA
+CTDC08 17 7577548 7577548 C T missense_variant TP53 "c.733G > A" p.Gly245Ser 15.27 Pathogenic/Likely_pathogenic rs28934575
+CTDC14 12 25380275 25380275 T G missense_variant KRAS "c.183A > C" p.Gln61His 4.09 Pathogenic/Likely_pathogenic rs17851045
+CTDC41 5 112175639 112175639 C T stop_gained APC "c.4348C > T" p.Arg1450* 38.41 Pathogenic/Likely_pathogenic rs12191333
+CTDC42 12 25398284 25398284 C A missense_variant KRAS "c.35G >" T p.Gly12Val 3.61 Pathogenic/Likely_pathogenic rs12191352
+CTDC50 15 66727454 66727454 A C missense_variant MAP2K1 "c.170A > C" p.Lys57Thr 13.72 Likely_pathogenic NA
+CTDC52 10 89711900 89711900 G A missense_variant PTEN "c.518G > A" p.Arg173His 1.4 Pathogenic/Likely_pathogenic rs12191329
+CTDC70 12 25398285 25398285 C A missense_variant KRAS "c.34G > T" p.Gly12Cys 2.44 Pathogenic/Likely_pathogenic rs12191353
+CTDC71 12 25398284 25398284 C A missense_variant KRAS "c.35G > T" p.Gly12Val 1.92 Pathogenic/Likely_pathogenic rs12191352
+CTDC88 5 112177901 112177901 C T stop_gained APC "c.6610C > T" p.Arg2204* 2.95 Likely_pathogenic NA
