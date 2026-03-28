@@ -16,6 +16,7 @@ which follows patients with colorectal cancer who become resistant to anti-EGFR 
 * Branching/converging workflow compares PBMC control with cfDNA in timecourse
 * HPC configuration (SLURM) scales to 1000s of samples
 * Checks SNPs for select loci (targetted sequencing)
+* Compares varscan and lofreq variant callers
 
 ### Results
 
