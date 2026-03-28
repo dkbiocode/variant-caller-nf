@@ -8,7 +8,7 @@ To track the progression of resistance to treatment, the authors in Lim et al. (
 
 ### Workflow 
 
-[This nextflow pipeline](reports/flowchart.pdf) calls variants on Illumina reads, and has modifications to track mutations in tumor biopsies after Lim et al. (2021)[^1], 
+This nextflow pipeline [(flowchart)](reports/flowchart.pdf) calls variants on Illumina reads, and has modifications to track mutations in tumor biopsies after Lim et al. (2021)[^1], 
 which follows patients with colorectal cancer who become resistant to anti-EGFR treatment.
 
 ### Features
