@@ -1,6 +1,6 @@
 ## Variant caller for tumor progression
 
-Treatment resistant tumors develop as a result of positive selection in the pathways which a pharmaceutical agent targets. An example is the epidermal growth factor receptor gene EGFR accumulating a mutation that results in constitutive activation, while anti-EGFR treatment is meant to interrupt signaling in that pathway. 
+Treatment resistance emerges through positive selection of mutations in the pathways targeted by a therapeutic agent. An example is the epidermal growth factor receptor (EGFR) accumulating a mutation that results in constitutive activation, while anti-EGFR treatment is meant to interrupt signaling in that pathway. 
 
 ### Approach
 
@@ -15,13 +15,13 @@ which follows patients with colorectal cancer who become resistant to anti-EGFR 
 
 * Branching/converging workflow compares PBMC control with cfDNA in timecourse
 * HPC configuration (SLURM) scales to 1000s of samples
-* Checks SNPs for select loci (targetted sequencing)
+* Checks SNPs for select loci (targeted sequencing)
 * Compares varscan and lofreq variant callers
 
 ### Results
 
 * Biopsy resistance mutations confirmed
-* Acquired resistance mutations tentative - needs calibration
+* Acquired resistance mutations tentative - acquired resistance mutations partially reproduced — parameter sensitivity under investigation
 * KRAS, MAP2K1, TP53 searched
 
 [^1]: Circulating tumor DNA sequencing in colorectal cancer patients treated with first-line chemotherapy with anti-EGFR. [Scientific Reports volume 11, Article number: 16333 (2021) ](https://www.nature.com/articles/s41598-021-95345-4)
